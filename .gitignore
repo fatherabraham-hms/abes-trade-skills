@@ -226,3 +226,7 @@ npm-debug.log*
 .watch-trends/
 config.local
 *.local.env
+
+# Keep skill script libraries tracked (root Python packaging ignores lib/)
+!skills/**/scripts/lib/
+!skills/**/scripts/lib/**
