@@ -1,0 +1,54 @@
+# watch-trends x402 setup — PUBLIC configuration only.
+#
+# Copy this file to `config.public` in the same directory, or export these as
+# environment variables. Environment variables always win over this file.
+#
+# NEVER put a secret in this file. The loader refuses to read CDP credentials
+# or Telegram tokens from here even if you paste them in, and preflight will
+# report `secret_in_public_config`. Secrets go in your runtime's secret store —
+# see references/security.md.
+
+# --- Service, verified against the live deployment -------------------------
+WATCHTRENDS_API_BASE_URL=https://openclaw-customizations-production.up.railway.app
+
+# --- Payment safety pins ---------------------------------------------------
+# The buyer refuses to sign anything that does not match these exactly. They
+# are seller/protocol values, not your wallet.
+WATCHTRENDS_EXPECTED_PAY_TO=0x7f985b1764f79faa42a4622bb605b23c8eb5abea
+WATCHTRENDS_EXPECTED_NETWORK=base
+WATCHTRENDS_EXPECTED_ASSET=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+
+# --- Buyer wallet ----------------------------------------------------------
+# A dedicated, small-balance account. Do NOT point this at your main trading
+# wallet; the buyer refuses known trading account names outright.
+WATCHTRENDS_CDP_ACCOUNT_NAME=WatchTrendsBuyer
+
+# --- Spend caps ------------------------------------------------------------
+# One paid call costs 10000 atomic units ($0.01). Leave this as-is.
+X402_MAX_AMOUNT_ATOMIC=10000
+
+# 200000000 = $200.00/day hard ceiling (USDC has 6 decimals).
+# This is a runaway ceiling, not a budget: one continuously watched ticker
+# costs about $1.06/day. Run `node scripts/budget-plan.mjs 1 24` to size it
+# down to your actual usage. The agent will never raise it for you.
+X402_DAILY_LIMIT_ATOMIC=200000000
+
+# --- State -----------------------------------------------------------------
+# Budget ledger, session metadata, signal spool, and locks live here.
+# WATCHTRENDS_STATE_DIR=~/.watch-trends
+
+# --- Gap recovery ----------------------------------------------------------
+# After a disconnect, pay for one catch-up poll per affected ticker ($0.01
+# each) to backfill missed signals. Gaps are always reported either way.
+WATCHTRENDS_RECOVER_GAPS=on
+WATCHTRENDS_GAP_MIN_SECONDS=5
+
+# --- Notifications ---------------------------------------------------------
+# Signals are ALWAYS spooled to disk. Set this to also get a push notification.
+# TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are YOUR secrets: set them like the
+# CDP variables, never in this file. See references/notifications.md.
+WATCHTRENDS_NOTIFY_CMD=scripts/notify-telegram.sh
+
+# `text` sends a human-readable message; `json` sends the structured event for
+# your own tooling to parse.
+WATCHTRENDS_NOTIFY_FORMAT=text

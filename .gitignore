@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node
+node_modules/
+npm-debug.log*
+.npm
+
+# Skill runtime state (budget ledger, session metadata, signal spool)
+.watch-trends/
+config.local
+*.local.env
