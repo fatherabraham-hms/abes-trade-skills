@@ -51,8 +51,16 @@ export TELEGRAM_CHAT_ID='987654321'
 export WATCHTRENDS_NOTIFY_CMD='scripts/notify-telegram.sh'
 ```
 
+After saving, reload the environment the same way as CDP credentials: Linux/macOS
+`source` the profile (or env file) and restart the agent / supervisor; Windows close
+all terminals, open a new one, restart the agent / supervisor. Doctor's `--notify`
+check reads the **current** process environment — a profile edit you have not sourced
+will look like the token is missing.
+
 If you run the supervisor under systemd or launchd, put these in the same environment
-file the unit reads — the supervisor passes its own environment to the hook.
+file the unit reads — the supervisor passes its own environment to the hook. A systemd
+unit needs `systemctl --user daemon-reload` and a restart of the unit after the env
+file changes; `source` alone does not update it.
 
 ### 4. Verify without sending anything
 

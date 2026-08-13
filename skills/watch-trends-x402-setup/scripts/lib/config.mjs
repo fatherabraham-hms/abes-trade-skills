@@ -30,21 +30,26 @@ export const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.ur
 
 /** Secrets belong in the runtime secret store, never in a config file. */
 export const SECRET_ENV_NAMES = [
-  "CB_AGENT_KIT_CLIENT_API_KEY",
-  "CB_AGENT_KIT_CLIENT_SECRET",
-  "CB_AGENT_KIT_WALLET_SECRET",
   "CDP_API_KEY_ID",
   "CDP_API_KEY_SECRET",
   "CDP_WALLET_SECRET",
+  // Legacy Agent Kit names — still accepted, never preferred in messages.
+  "CB_AGENT_KIT_CLIENT_API_KEY",
+  "CB_AGENT_KIT_CLIENT_SECRET",
+  "CB_AGENT_KIT_WALLET_SECRET",
   "TELEGRAM_BOT_TOKEN",
   "TELEGRAM_CHAT_ID",
 ];
 
-/** The three credentials the CDP buyer needs, with their accepted aliases. */
+/**
+ * The three credentials the CDP / x402 buyer needs.
+ * Primary names match https://docs.cdp.coinbase.com/x402/buyer/quickstart.
+ * `legacy` aliases remain accepted for older installs.
+ */
 export const CDP_CREDENTIALS = [
-  { primary: "CB_AGENT_KIT_CLIENT_API_KEY", alias: "CDP_API_KEY_ID" },
-  { primary: "CB_AGENT_KIT_CLIENT_SECRET", alias: "CDP_API_KEY_SECRET" },
-  { primary: "CB_AGENT_KIT_WALLET_SECRET", alias: "CDP_WALLET_SECRET" },
+  { primary: "CDP_API_KEY_ID", legacy: "CB_AGENT_KIT_CLIENT_API_KEY" },
+  { primary: "CDP_API_KEY_SECRET", legacy: "CB_AGENT_KIT_CLIENT_SECRET" },
+  { primary: "CDP_WALLET_SECRET", legacy: "CB_AGENT_KIT_WALLET_SECRET" },
 ];
 
 let publicFileCache;
@@ -165,10 +170,11 @@ export function loadConfig() {
  * out. Callers get booleans, not secrets.
  */
 export function cdpCredentialStatus() {
-  return CDP_CREDENTIALS.map(({ primary, alias }) => ({
+  return CDP_CREDENTIALS.map(({ primary, legacy }) => ({
     name: primary,
-    alias,
-    set: Boolean(process.env[primary] || process.env[alias]),
+    legacy,
+    set: Boolean(process.env[primary] || process.env[legacy]),
+    via: process.env[primary] ? primary : process.env[legacy] ? legacy : null,
   }));
 }
 

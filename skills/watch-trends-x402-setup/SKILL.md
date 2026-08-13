@@ -1,6 +1,6 @@
 ---
 name: watch-trends-x402-setup
-description: Sets up a dedicated x402 crypto wallet and receives paid watch-trends trading signals over an outbound WebSocket, with no localhost server, no tunnel, and no secrets in chat. Use when a user wants to buy, receive, monitor, or stop watch-trends trend signals, set up an x402 or CDP Agent Kit payment wallet, diagnose x402 payment or signal-delivery failures, or check what watch-trends is costing them.
+description: Sets up a dedicated x402 crypto wallet and receives paid watch-trends trading signals over an outbound WebSocket, with no localhost server, no tunnel, and no secrets in chat. Use when a user wants to buy, receive, monitor, or stop watch-trends trend signals, set up a CDP / x402 payment wallet (CDP_API_KEY_ID, CDP_API_KEY_SECRET, CDP_WALLET_SECRET), diagnose x402 payment or signal-delivery failures, or check what watch-trends is costing them.
 ---
 
 # watch-trends x402 setup
@@ -58,10 +58,52 @@ credential *names* are set. On `deps_not_installed`, run `npm ci` in the skill
 directory; never fall back to another project's `node_modules`.
 
 **2. Secrets** — one user prompt
-Tell the user to set `CB_AGENT_KIT_CLIENT_API_KEY`, `CB_AGENT_KIT_CLIENT_SECRET`, and
-`CB_AGENT_KIT_WALLET_SECRET` in their runtime's secret store. Point at
-`references/security.md` for their platform. Ask them to reply when saved, then rerun
-preflight. Do not ask for the values.
+Send the user to the official CDP x402 buyer quickstart and walk them through creating
+credentials. Do **not** ask them to paste values into chat.
+
+1. Open [CDP x402 buyer quickstart](https://docs.cdp.coinbase.com/x402/buyer/quickstart)
+   (prerequisites + env var names).
+2. In the [CDP Portal](https://portal.cdp.coinbase.com):
+   - Sign in (a project is created on first sign-in).
+   - Create a **Secret API key**: [API Keys → Secret](https://portal.cdp.coinbase.com/api-keys/secret)
+     → **Create API key**. Save the **API key ID** and **API key secret** immediately —
+     the secret is shown once.
+   - Create a **Wallet Secret**: [Non-custodial Wallet → Security](https://portal.cdp.coinbase.com/wallets/non-custodial/security)
+     → **Generate**. Save it immediately — it is also shown once.
+3. Set these in their runtime secret store / shell profile (official names):
+
+```bash
+export CDP_API_KEY_ID="your-api-key-id"
+export CDP_API_KEY_SECRET="your-api-key-secret"
+export CDP_WALLET_SECRET="your-wallet-secret"
+```
+
+Legacy names still work if already configured — map them as:
+
+| Official (preferred) | Legacy (still accepted) |
+|---|---|
+| `CDP_API_KEY_ID` | `CB_AGENT_KIT_CLIENT_API_KEY` |
+| `CDP_API_KEY_SECRET` | `CB_AGENT_KIT_CLIENT_SECRET` |
+| `CDP_WALLET_SECRET` | `CB_AGENT_KIT_WALLET_SECRET` |
+
+Point at `references/security.md` for platform-specific secret storage. The skill's
+`npm ci` already installs `@coinbase/cdp-sdk` (the CDP / x402 buyer SDK); the user does
+not need a separate Agent Kit install for this skill's scripts.
+
+**Also tell them how to make the running process see the values** — writing a profile
+file is not enough, and this is the usual reason preflight still reports credentials
+missing:
+
+- **Linux / macOS:** after saving to `~/.bashrc` / `~/.zshrc` (or a sourced env file),
+  run `source ~/.bashrc` or `source ~/.zshrc` in the shell that launches the agent,
+  then **restart the agent** from that shell.
+- **Windows:** after setting User environment variables, close every open terminal,
+  open a **new** one (or sign out/in if the agent was started from a shortcut), then
+  **restart the agent**. Windows has no `source` for User vars.
+
+Only after they confirm the reload + agent restart, rerun preflight. If preflight still
+shows unset, do not invent fixes — ask whether they sourced/restarted, and point back
+at `references/security.md`.
 
 **3. Cost disclosure** — `node scripts/budget-plan.mjs <tickers> <hours>`
 Show the projected dollar cost and the per-day rate. Mention that the shipped

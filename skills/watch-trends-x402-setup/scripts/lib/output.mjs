@@ -13,12 +13,12 @@ import { USDC_DECIMALS } from "./constants.mjs";
 
 /** Env var names whose values must never appear in output. */
 const SECRET_ENV_NAMES = [
-  "CB_AGENT_KIT_CLIENT_API_KEY",
-  "CB_AGENT_KIT_CLIENT_SECRET",
-  "CB_AGENT_KIT_WALLET_SECRET",
   "CDP_API_KEY_ID",
   "CDP_API_KEY_SECRET",
   "CDP_WALLET_SECRET",
+  "CB_AGENT_KIT_CLIENT_API_KEY",
+  "CB_AGENT_KIT_CLIENT_SECRET",
+  "CB_AGENT_KIT_WALLET_SECRET",
   "TELEGRAM_BOT_TOKEN",
 ];
 

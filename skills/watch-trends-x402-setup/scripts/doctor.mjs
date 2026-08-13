@@ -173,7 +173,7 @@ async function stageConfig(config) {
   if (missing.length) {
     return failStage("config", "cdp_credentials_missing",
       `These CDP variables are not set: ${missing.join(", ")}.`,
-      "Set the named CDP Agent Kit values in the runtime secret manager. Do not paste them into chat; reply only when saved and I will recheck.");
+      "Create CDP_API_KEY_ID, CDP_API_KEY_SECRET, and CDP_WALLET_SECRET in the Coinbase Developer Platform portal (https://docs.cdp.coinbase.com/x402/buyer/quickstart), set them in the runtime secret manager, then reload: Linux/macOS source the profile and restart the agent; Windows close all terminals, open a new one, restart the agent. Legacy CB_AGENT_KIT_* names still work. Do not paste values into chat; reply only after reload and I will recheck.");
   }
 
   const isolation = checkWalletIsolation(config.accountName, config.allowSharedWallet);
@@ -206,7 +206,12 @@ async function stageConfig(config) {
     expected_network: config.network,
     expected_asset: config.asset,
     cdp_account_name: config.accountName,
-    credentials_present: cdpCredentialStatus().map((c) => ({ name: c.name, set: c.set })),
+    credentials_present: cdpCredentialStatus().map((c) => ({
+      name: c.name,
+      legacy: c.legacy,
+      set: c.set,
+      via: c.via,
+    })),
     max_amount_usd: formatDollars(config.maxAmountAtomic),
     daily_cap_usd: formatDollars(config.dailyLimitAtomic),
     spent_today_usd: formatDollars(BigInt(ledger.spent_atomic)),

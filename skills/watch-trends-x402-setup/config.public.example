@@ -4,9 +4,11 @@
 # environment variables. Environment variables always win over this file.
 #
 # NEVER put a secret in this file. The loader refuses to read CDP credentials
-# or Telegram tokens from here even if you paste them in, and preflight will
-# report `secret_in_public_config`. Secrets go in your runtime's secret store —
-# see references/security.md.
+# (CDP_API_KEY_ID / CDP_API_KEY_SECRET / CDP_WALLET_SECRET) or Telegram tokens
+# from here even if you paste them in, and preflight will report
+# `secret_in_public_config`. Create CDP credentials via
+# https://docs.cdp.coinbase.com/x402/buyer/quickstart and store them in your
+# runtime's secret store — see references/security.md.
 
 # --- Service, verified against the live deployment -------------------------
 WATCHTRENDS_API_BASE_URL=https://openclaw-customizations-production.up.railway.app

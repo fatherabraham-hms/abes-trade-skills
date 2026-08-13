@@ -51,7 +51,7 @@ run(STAGE, async () => {
         ...err.extra,
         next_action:
           err.code === "cdp_credentials_missing"
-            ? "Name the missing variables and tell the user to set them in their runtime secret manager. Never ask for the values in chat."
+            ? "Name the missing CDP_* variables, point the user at https://docs.cdp.coinbase.com/x402/buyer/quickstart, tell them to set the values in their runtime secret manager, then source the profile (Linux/macOS) or open a new terminal (Windows) and restart the agent. Never ask for the values in chat."
             : "Resolve the reported problem, then rerun this script.",
       });
       process.exit(1);

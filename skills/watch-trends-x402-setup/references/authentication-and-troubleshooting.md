@@ -9,7 +9,9 @@ script supplies `next_action`, prefer it — it is written for the specific situ
 There is no login, API key, or account to register with watch-trends. The wallet *is*
 the identity:
 
-1. You set three CDP Agent Kit credentials in your secret store.
+1. You set three CDP credentials (`CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`,
+   `CDP_WALLET_SECRET`) in your secret store — see
+   [https://docs.cdp.coinbase.com/x402/buyer/quickstart](https://docs.cdp.coinbase.com/x402/buyer/quickstart).
 2. `print-wallet-address.mjs` resolves the dedicated `WatchTrendsBuyer` account through
    CDP and prints only its public address.
 3. You fund that address with a small amount of USDC on Base.
@@ -41,7 +43,7 @@ mitigation. Nothing in transit is exposed — the connection is `wss://`.
 
 | Code | What happened | What to do |
 |---|---|---|
-| `cdp_credentials_missing` | One or more CDP variable names unset | Set the named variables per `references/security.md`. Never paste values into chat |
+| `cdp_credentials_missing` | One or more of `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` / `CDP_WALLET_SECRET` unset **in this process** | Create them in the CDP portal via [x402 buyer quickstart](https://docs.cdp.coinbase.com/x402/buyer/quickstart), set them per `references/security.md`, then reload: Linux/macOS `source` the profile and restart the agent; Windows close all terminals, open a new one (or sign out/in), restart the agent. Legacy `CB_AGENT_KIT_*` names still work. Editing a profile alone does not update a running process. Never paste values into chat |
 | `shared_wallet_refused` | The resolved account looks like a general trading wallet | Use `WATCHTRENDS_CDP_ACCOUNT_NAME=WatchTrendsBuyer`. Only the user may set `WATCHTRENDS_ALLOW_SHARED_WALLET=1`, and only if they accept exposing that balance |
 | `payer_address_mismatch` | Resolved wallet is not `WATCHTRENDS_EXPECTED_PAYER` | Nothing was signed. Fix whichever value is wrong |
 | `wallet_needs_usdc` | Requirements were valid but settlement failed on balance | Send USDC on **Base** (not Ethereum mainnet) to the printed address. Never share keys or seed phrases |

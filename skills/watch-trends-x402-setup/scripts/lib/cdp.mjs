@@ -1,5 +1,9 @@
 /**
- * CDP Agent Kit access.
+ * CDP SDK / x402 buyer access.
+ *
+ * Credentials use the official CDP_* env names from
+ * https://docs.cdp.coinbase.com/x402/buyer/quickstart, with legacy
+ * CB_AGENT_KIT_* accepted as fallbacks.
  *
  * Resolution is deliberately strict: the SDK must come from this skill's own
  * node_modules, installed from the committed lockfile. The previous generation
@@ -71,18 +75,23 @@ async function loadSdk() {
 }
 
 function credentials() {
-  const apiKeyId = process.env.CB_AGENT_KIT_CLIENT_API_KEY || process.env.CDP_API_KEY_ID;
-  const apiKeySecret = process.env.CB_AGENT_KIT_CLIENT_SECRET || process.env.CDP_API_KEY_SECRET;
-  const walletSecret = process.env.CB_AGENT_KIT_WALLET_SECRET || process.env.CDP_WALLET_SECRET;
+  // Prefer CDP_* (official x402 / CDP SDK names); accept legacy CB_AGENT_KIT_*.
+  const apiKeyId = process.env.CDP_API_KEY_ID || process.env.CB_AGENT_KIT_CLIENT_API_KEY;
+  const apiKeySecret = process.env.CDP_API_KEY_SECRET || process.env.CB_AGENT_KIT_CLIENT_SECRET;
+  const walletSecret = process.env.CDP_WALLET_SECRET || process.env.CB_AGENT_KIT_WALLET_SECRET;
   const missing = [];
-  if (!apiKeyId) missing.push("CB_AGENT_KIT_CLIENT_API_KEY");
-  if (!apiKeySecret) missing.push("CB_AGENT_KIT_CLIENT_SECRET");
-  if (!walletSecret) missing.push("CB_AGENT_KIT_WALLET_SECRET");
+  if (!apiKeyId) missing.push("CDP_API_KEY_ID");
+  if (!apiKeySecret) missing.push("CDP_API_KEY_SECRET");
+  if (!walletSecret) missing.push("CDP_WALLET_SECRET");
   if (missing.length) {
     throw new SkillError(
       "cdp_credentials_missing",
-      `These CDP Agent Kit variables are not set: ${missing.join(", ")}. ` +
-        "Set them in your runtime's secret store. Do not paste the values into chat.",
+      `These CDP variables are not set: ${missing.join(", ")}. ` +
+        "Create them in the Coinbase Developer Platform portal " +
+        "(https://docs.cdp.coinbase.com/x402/buyer/quickstart), set them in your " +
+        "runtime's secret store, then reload the environment " +
+        "(Linux/macOS: source the profile and restart the agent; Windows: close all terminals, open a new one, restart the agent). " +
+        "Legacy CB_AGENT_KIT_* names still work if already set. Do not paste the values into chat.",
       { missing }
     );
   }

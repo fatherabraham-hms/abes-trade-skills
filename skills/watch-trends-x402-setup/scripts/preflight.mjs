@@ -58,7 +58,13 @@ run(STAGE, async () => {
   if (missing.length) {
     problems.push({
       code: "cdp_credentials_missing",
-      message: `These CDP variables are not set: ${missing.join(", ")}. Set them in your runtime's secret store; do not paste values into chat.`,
+      message:
+        `These CDP variables are not set: ${missing.join(", ")}. ` +
+        "Follow https://docs.cdp.coinbase.com/x402/buyer/quickstart to create them in the CDP portal, " +
+        "export CDP_API_KEY_ID / CDP_API_KEY_SECRET / CDP_WALLET_SECRET, then reload " +
+        "(Linux/macOS: source ~/.bashrc or ~/.zshrc and restart the agent; " +
+        "Windows: close all terminals, open a new one, restart the agent). " +
+        "Legacy CB_AGENT_KIT_* names still work. Do not paste values into chat.",
     });
   }
 
