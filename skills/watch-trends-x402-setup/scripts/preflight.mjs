@@ -81,7 +81,8 @@ run(STAGE, async () => {
     warnings.push({
       code: "notify_not_configured",
       message:
-        "No WATCHTRENDS_NOTIFY_CMD is set. Signals will still be spooled locally, but you will only see them when you next ask the agent.",
+        "No WATCHTRENDS_NOTIFY_CMD is set. Run node scripts/detect-notify.mjs to reuse an existing OpenClaw/Hermes channel. " +
+        "Signals are still spooled locally. Do not ask the user to create a Telegram bot.",
     });
   }
 

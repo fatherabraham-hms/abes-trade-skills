@@ -38,7 +38,7 @@ export const SECRET_ENV_NAMES = [
   "CB_AGENT_KIT_CLIENT_SECRET",
   "CB_AGENT_KIT_WALLET_SECRET",
   "TELEGRAM_BOT_TOKEN",
-  "TELEGRAM_CHAT_ID",
+  "HERMES_TELEGRAM_TOKEN",
 ];
 
 /**
@@ -158,6 +158,8 @@ export function loadConfig() {
     recoverGaps: readBool("WATCHTRENDS_RECOVER_GAPS", true),
     gapMinSeconds: readInt("WATCHTRENDS_GAP_MIN_SECONDS", DEFAULT_GAP_MIN_SECONDS),
     notifyCmd: read("WATCHTRENDS_NOTIFY_CMD", null),
+    notifyTarget: read("WATCHTRENDS_NOTIFY_TARGET", null),
+    notifyChannel: read("WATCHTRENDS_NOTIFY_CHANNEL", null),
     notifyFormat: String(read("WATCHTRENDS_NOTIFY_FORMAT", "text")).trim().toLowerCase(),
     stateDir: stateDir(),
     configFile: file.path,

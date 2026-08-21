@@ -20,6 +20,7 @@ const SECRET_ENV_NAMES = [
   "CB_AGENT_KIT_CLIENT_SECRET",
   "CB_AGENT_KIT_WALLET_SECRET",
   "TELEGRAM_BOT_TOKEN",
+  "HERMES_TELEGRAM_TOKEN",
 ];
 
 /** Header names that carry payment material and must never be printed. */

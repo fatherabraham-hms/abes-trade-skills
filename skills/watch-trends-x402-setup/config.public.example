@@ -46,10 +46,17 @@ WATCHTRENDS_RECOVER_GAPS=on
 WATCHTRENDS_GAP_MIN_SECONDS=5
 
 # --- Notifications ---------------------------------------------------------
-# Signals are ALWAYS spooled to disk. Set this to also get a push notification.
-# TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are YOUR secrets: set them like the
-# CDP variables, never in this file. See references/notifications.md.
-WATCHTRENDS_NOTIFY_CMD=scripts/notify-telegram.sh
+# Signals are ALWAYS spooled to disk. Prefer auto-detection over hard-coding:
+#   node scripts/detect-notify.mjs
+#   node scripts/detect-notify.mjs --apply
+# That reuses an existing OpenClaw / Hermes / Telegram bot — never creates one.
+# Override only if you already know the hook you want:
+# WATCHTRENDS_NOTIFY_CMD=scripts/notify-openclaw.sh
+# WATCHTRENDS_NOTIFY_TARGET=6763860955
+# WATCHTRENDS_NOTIFY_CHANNEL=telegram
+#
+# TELEGRAM_BOT_TOKEN / HERMES_TELEGRAM_TOKEN are YOUR secrets: set them like the
+# CDP variables in the runtime secret store, never in this file.
 
 # `text` sends a human-readable message; `json` sends the structured event for
 # your own tooling to parse.

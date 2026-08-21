@@ -47,7 +47,7 @@ Copy this checklist and track it:
 - [ ] 3. Cost disclosure + consent (user)
 - [ ] 4. Fund the dedicated wallet (user)
 - [ ] 5. Doctor
-- [ ] 6. Notification channel (user)
+- [ ] 6. Notification channel (detect existing; never BotFather-first)
 - [ ] 7. Start the watch (first charge)
 - [ ] 8. Run the supervisor detached
 ```
@@ -124,12 +124,22 @@ contract, the unpaid 402 gate, a dry-run of the buyer, and the notification path
 on any failure and use its `next_action` verbatim. Never attempt payment past a
 `service_not_ready`, `service_contract_mismatch`, or `clock_skew_detected`.
 
-**6. Notification channel** — one user prompt, before spending
-Default to Telegram: walk the user through `references/notifications.md`, have them set
-`TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in their secret store, and set
-`WATCHTRENDS_NOTIFY_CMD=scripts/notify-telegram.sh`. Verify with
-`node scripts/doctor.mjs --notify`, which sends no message. If they decline a channel,
-say plainly that signals will be spooled but only visible when they next ask you.
+**6. Notification channel** — detect first, before spending
+**Do not** walk the user through BotFather or creating a new Telegram bot.
+
+1. Run `node scripts/detect-notify.mjs`.
+2. If `recommended` is set: tell the user which **existing** channel will be used
+   (e.g. “your OpenClaw Telegram”) and ask yes/no.
+3. On yes: `node scripts/detect-notify.mjs --apply`, then
+   `node scripts/doctor.mjs --notify` (sends no message).
+4. If nothing was found: default to **spool-only** and say plainly that signals are
+   saved locally and shown when they next ask you. Optionally offer desktop notify if
+   `detect-notify` listed a `desktop` candidate. BotFather is last resort only — see
+   the appendix in `references/notifications.md` — and only if they explicitly ask.
+
+OpenClaw and Hermes already own messaging credentials; Claude Code / Codex have no
+chat-send API, but may still reuse OpenClaw/Hermes CLIs if those are installed on the
+host.
 
 **7. Start the watch** — `scripts/start-watch.sh <ticker> <segment> <threshold> --start-price <p>`
 Get the current price from your own market-data capability or ask the user. **Echo the
@@ -188,5 +198,5 @@ failure that a live test would actually diagnose.
 - [references/runtimes.md](references/runtimes.md) — install and detached supervisor per host
 - [references/authentication-and-troubleshooting.md](references/authentication-and-troubleshooting.md) — every error code and its fix
 - [references/costs.md](references/costs.md) — pricing math and cap sizing
-- [references/notifications.md](references/notifications.md) — spool, notify hook recipes, Telegram walkthrough
+- [references/notifications.md](references/notifications.md) — detect existing channels; spool; notify hooks; BotFather appendix only
 - [references/service-contract.md](references/service-contract.md) — verified contract and open service-side dependencies

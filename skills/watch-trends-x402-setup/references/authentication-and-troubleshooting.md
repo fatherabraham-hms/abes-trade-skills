@@ -113,7 +113,9 @@ guessing: the difference between "re-buy" and "never re-buy" is real money.
 
 | Code | What happened | What to do |
 |---|---|---|
-| `notify_not_configured` | No `WATCHTRENDS_NOTIFY_CMD` | Warning only. Signals are still spooled. Tell the user plainly they will only see signals when they next ask the agent |
+| `notify_not_configured` | No `WATCHTRENDS_NOTIFY_CMD` | Warning only. Signals are still spooled. Run `detect-notify.mjs` and confirm an **existing** OpenClaw/Hermes/Telegram channel. Do **not** walk the user through BotFather unless they explicitly ask for a new bot after detection found nothing |
+| `notify_channel_detected` | `detect-notify.mjs` found a reusable channel | Confirm the target with the user, then `--apply` and `doctor.mjs --notify` |
+| `notify_channel_wired` | Non-secret notify keys written to `config.public` | Run `doctor.mjs --notify`. Bot tokens were not written |
 | `notify_command_failed` | The hook exited non-zero, timed out, or was not executable | Retried 3x with backoff, then marked `notified:false` in the spool. **The socket and lease are untouched** — a broken notifier must never cost the user their paid session |
 
 ## What the scripts never print

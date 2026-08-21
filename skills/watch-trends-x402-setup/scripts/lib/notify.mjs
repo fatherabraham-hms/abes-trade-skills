@@ -112,10 +112,29 @@ function runOnce(command, input, env) {
 export class Notifier {
   constructor(config, { onResult } = {}) {
     this.command = config.notifyCmd;
+    this.target = config.notifyTarget || null;
+    this.channel = config.notifyChannel || null;
     this.format = config.notifyFormat === "json" ? "json" : "text";
     this.queue = Promise.resolve();
     this.onResult = onResult || (() => {});
     this.configured = Boolean(this.command);
+  }
+
+  /** Env for the child: inject public target/channel from config.public if unset. */
+  childEnv() {
+    const env = { ...process.env };
+    if (this.target && !env.WATCHTRENDS_NOTIFY_TARGET) {
+      env.WATCHTRENDS_NOTIFY_TARGET = String(this.target);
+    }
+    if (this.channel && !env.WATCHTRENDS_NOTIFY_CHANNEL) {
+      env.WATCHTRENDS_NOTIFY_CHANNEL = String(this.channel);
+    }
+    // Telegram wrapper also accepts TELEGRAM_CHAT_ID; mirror a bare numeric target.
+    if (this.target && !env.TELEGRAM_CHAT_ID) {
+      const bare = String(this.target).replace(/^telegram:/i, "");
+      if (/^-?\d+$/.test(bare)) env.TELEGRAM_CHAT_ID = bare;
+    }
+    return env;
   }
 
   /** Resolve a bare script name against the skill directory for convenience. */
@@ -152,7 +171,7 @@ export class Notifier {
     const command = this.resolvedCommand();
     let last = { ok: false, error: "not attempted" };
     for (let attempt = 1; attempt <= NOTIFY_MAX_ATTEMPTS; attempt += 1) {
-      last = await runOnce(command, body, process.env);
+      last = await runOnce(command, body, this.childEnv());
       if (last.ok) {
         this.onResult({ event_id: signal.eventId, notified: true, attempts: attempt });
         return;

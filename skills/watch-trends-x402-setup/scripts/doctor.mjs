@@ -47,6 +47,7 @@ import { CONTRACT, MAX_CLOCK_SKEW_SEC, PRICE_ATOMIC } from "./lib/constants.mjs"
 import { summary as ledgerSummary } from "./lib/ledger.mjs";
 import { spoolStats } from "./lib/spool.mjs";
 import { Notifier } from "./lib/notify.mjs";
+import { detectNotifyChannels } from "./lib/detect-notify.mjs";
 import { emit, formatDollars, mask, run } from "./lib/output.mjs";
 import { validateRequirement } from "./lib/x402.mjs";
 
@@ -491,21 +492,27 @@ async function stageNotify(config) {
   }
 
   if (!config.notifyCmd) {
+    const detected = detectNotifyChannels();
     return {
       stage: "notify",
       ok: true,
       code: "notify_not_configured",
       message:
-        "No WATCHTRENDS_NOTIFY_CMD is set. Signals will be spooled to disk but nothing will be pushed to the user.",
+        "No WATCHTRENDS_NOTIFY_CMD is set. Signals will be spooled to disk but nothing will be pushed yet.",
       spool,
+      detection: {
+        runtime_hint: detected.runtime_hint,
+        candidates: detected.candidates,
+        recommended: detected.recommended,
+        discovery: detected.discovery,
+      },
       warnings: [
         {
           code: "notify_not_configured",
-          message:
-            "Tell the user plainly that without a notification channel they will only see signals when they next ask the agent. " +
-            "references/notifications.md walks through the Telegram setup.",
+          message: detected.next_action,
         },
       ],
+      next_action: detected.next_action,
     };
   }
 
@@ -517,20 +524,103 @@ async function stageNotify(config) {
       "Fix the notify command path, then rerun 'doctor.mjs --notify'. No message was sent.");
   }
 
-  const usesTelegram = notifier.resolvedCommand().includes("notify-telegram");
+  const cmd = notifier.resolvedCommand();
+  const usesTelegram = cmd.includes("notify-telegram");
+  const usesOpenclaw = cmd.includes("notify-openclaw");
+  const usesHermes = cmd.includes("notify-hermes");
+  const usesDesktop = cmd.includes("notify-desktop");
+  const target =
+    config.notifyTarget ||
+    process.env.WATCHTRENDS_NOTIFY_TARGET ||
+    process.env.TELEGRAM_CHAT_ID ||
+    process.env.TELEGRAM_CONTEXT_ALERT_CHAT_ID ||
+    null;
+
+  if (usesOpenclaw) {
+    const oc = resolveExecutable("openclaw");
+    if (!oc.found) {
+      return failStage("notify", "notify_command_failed",
+        "notify-openclaw is selected but openclaw is not on PATH.",
+        "Install or expose the openclaw CLI, or re-run detect-notify.mjs to pick another existing channel.");
+    }
+    if (!target) {
+      return failStage("notify", "notify_command_failed",
+        "notify-openclaw needs WATCHTRENDS_NOTIFY_TARGET (chat id).",
+        "Run node scripts/detect-notify.mjs --apply after confirming the existing OpenClaw Telegram target.");
+    }
+    return {
+      stage: "notify",
+      ok: true,
+      code: "ok",
+      command_resolves_to: resolved.path,
+      via: "openclaw",
+      target,
+      format: config.notifyFormat === "json" ? "json" : "text",
+      spool,
+      note: "No notification was sent by this check.",
+      warnings,
+    };
+  }
+
+  if (usesHermes) {
+    const he = resolveExecutable("hermes");
+    if (!he.found) {
+      return failStage("notify", "notify_command_failed",
+        "notify-hermes is selected but hermes is not on PATH.",
+        "Install or expose the hermes CLI, or re-run detect-notify.mjs to pick another existing channel.");
+    }
+    if (!target) {
+      return failStage("notify", "notify_command_failed",
+        "notify-hermes needs WATCHTRENDS_NOTIFY_TARGET (e.g. telegram or telegram:CHAT_ID).",
+        "Run node scripts/detect-notify.mjs --apply after confirming the existing Hermes channel.");
+    }
+    return {
+      stage: "notify",
+      ok: true,
+      code: "ok",
+      command_resolves_to: resolved.path,
+      via: "hermes",
+      target,
+      format: config.notifyFormat === "json" ? "json" : "text",
+      spool,
+      note: "No notification was sent by this check.",
+      warnings,
+    };
+  }
+
+  if (usesDesktop) {
+    const desk = resolveExecutable("notify-send").found || resolveExecutable("terminal-notifier").found;
+    if (!desk) {
+      return failStage("notify", "notify_command_failed",
+        "notify-desktop is selected but neither notify-send nor terminal-notifier is on PATH.",
+        "Install a desktop notifier, or proceed with spool-only.");
+    }
+    return {
+      stage: "notify",
+      ok: true,
+      code: "ok",
+      command_resolves_to: resolved.path,
+      via: "desktop",
+      format: config.notifyFormat === "json" ? "json" : "text",
+      spool,
+      note: "No notification was sent by this check.",
+      warnings,
+    };
+  }
+
   const telegram = { used: usesTelegram };
   if (usesTelegram) {
-    telegram.bot_token_set = Boolean(process.env.TELEGRAM_BOT_TOKEN);
-    telegram.chat_id_set = Boolean(process.env.TELEGRAM_CHAT_ID);
+    telegram.bot_token_set = Boolean(process.env.TELEGRAM_BOT_TOKEN || process.env.HERMES_TELEGRAM_TOKEN);
+    telegram.chat_id_set = Boolean(target);
     if (!telegram.bot_token_set || !telegram.chat_id_set) {
       return failStage("notify", "notify_command_failed",
-        `The Telegram notifier is selected but ${!telegram.bot_token_set ? "TELEGRAM_BOT_TOKEN" : "TELEGRAM_CHAT_ID"} is not set.`,
-        "Point the user at references/notifications.md to create a bot and find their chat id, then have them set both variables in their secret store. Never ask for the token in chat.");
+        `The Telegram notifier is selected but ${!telegram.bot_token_set ? "TELEGRAM_BOT_TOKEN" : "WATCHTRENDS_NOTIFY_TARGET / TELEGRAM_CHAT_ID"} is not set.`,
+        "Reuse the bot token already configured for OpenClaw or Hermes. Run detect-notify.mjs to find the chat id. Do not create a new BotFather bot.");
     }
-    // getMe authenticates the token without sending anyone a message.
+    const token = process.env.TELEGRAM_BOT_TOKEN || process.env.HERMES_TELEGRAM_TOKEN;
     try {
       const response = await fetchWithTimeout(
-        `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getMe`,
+        `https://api.telegram.org/bot${token}/getMe`,
         { headers: { Accept: "application/json" } },
         10_000
       );
@@ -540,7 +630,7 @@ async function stageNotify(config) {
       if (!telegram.authenticated) {
         return failStage("notify", "notify_command_failed",
           "Telegram rejected the bot token. The token value was not logged.",
-          "Ask the user to re-check TELEGRAM_BOT_TOKEN in their secret store against the value BotFather gave them. Never ask them to paste it into chat.");
+          "Ask the user to re-check TELEGRAM_BOT_TOKEN in their existing OpenClaw/Hermes secret store. Never ask them to paste it into chat or create a new bot.");
       }
     } catch (err) {
       warnings.push({
@@ -555,6 +645,7 @@ async function stageNotify(config) {
     ok: true,
     code: "ok",
     command_resolves_to: resolved.path,
+    target,
     format: config.notifyFormat === "json" ? "json" : "text",
     telegram,
     spool,

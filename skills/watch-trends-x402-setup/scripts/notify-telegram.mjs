@@ -21,9 +21,11 @@ function fail(message, code = 1) {
 
 /** Strip the bot token from anything on its way to a log. */
 function maskToken(text) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
   let out = String(text);
-  if (token && token.length >= 8) out = out.split(token).join("[redacted-token]");
+  for (const name of ["TELEGRAM_BOT_TOKEN", "HERMES_TELEGRAM_TOKEN"]) {
+    const token = process.env[name];
+    if (token && token.length >= 8) out = out.split(token).join("[redacted-token]");
+  }
   return out.replace(/bot\d+:[A-Za-z0-9_-]+/g, "bot[redacted-token]");
 }
 
@@ -53,11 +55,30 @@ function fit(message) {
 }
 
 async function main() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  // Prefer the official token; accept Hermes isolated-assistant naming.
+  const token = process.env.TELEGRAM_BOT_TOKEN || process.env.HERMES_TELEGRAM_TOKEN;
+  // Chat id may come from detect-notify wiring or existing OpenClaw/Hermes env.
+  const chatId = (
+    process.env.WATCHTRENDS_NOTIFY_TARGET ||
+    process.env.TELEGRAM_CHAT_ID ||
+    process.env.TELEGRAM_CONTEXT_ALERT_CHAT_ID ||
+    process.env.TELEGRAM_HOME_CHANNEL ||
+    process.env.HERMES_TELEGRAM_USER ||
+    ""
+  ).replace(/^telegram:/i, "");
 
-  if (!token) fail("TELEGRAM_BOT_TOKEN is not set. Set it in your secret store; see references/notifications.md.", 2);
-  if (!chatId) fail("TELEGRAM_CHAT_ID is not set. Set it in your secret store; see references/notifications.md.", 2);
+  if (!token) {
+    fail(
+      "TELEGRAM_BOT_TOKEN is not set. Reuse your existing OpenClaw/Hermes bot token — do not create a new bot. See references/notifications.md.",
+      2
+    );
+  }
+  if (!chatId) {
+    fail(
+      "No chat id found (WATCHTRENDS_NOTIFY_TARGET / TELEGRAM_CHAT_ID / TELEGRAM_CONTEXT_ALERT_CHAT_ID). Run node scripts/detect-notify.mjs first.",
+      2
+    );
+  }
 
   const message = (await readStdin()).trim();
   if (!message) fail("Nothing arrived on stdin, so there was no message to send.", 2);
