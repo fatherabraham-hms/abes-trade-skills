@@ -15,7 +15,7 @@
 import WebSocket from "ws";
 
 import { CONTRACT, KNOWN_FRAME_TYPES, PRICE_ATOMIC } from "./lib/constants.mjs";
-import { loadConfig, statePath } from "./lib/config.mjs";
+import { assertWebSocketUrl, loadConfig, statePath } from "./lib/config.mjs";
 import { inspect as inspectLock } from "./lib/lock.mjs";
 import { deriveWsUrl, loadContract, validateContract } from "./lib/contract.mjs";
 import { SkillError } from "./lib/cdp.mjs";
@@ -77,7 +77,10 @@ run(STAGE, async () => {
     process.exit(1);
   }
 
-  const contract = await loadContract(config.apiBaseUrl, { force: true });
+  const contract = await loadContract(config.apiBaseUrl, {
+    force: true,
+    servicePrefix: config.servicePrefix,
+  });
   const mismatches = validateContract(contract.root, contract.discovery);
   if (mismatches.length) {
     emit({
@@ -91,6 +94,11 @@ run(STAGE, async () => {
   }
 
   const wsUrl = deriveWsUrl(config.apiBaseUrl, contract.root.socket.path);
+  const canonicalCheck = assertWebSocketUrl(wsUrl, config, contract.root.socket.path);
+  if (!canonicalCheck.ok) {
+    emit({ ok: false, stage: STAGE, code: canonicalCheck.code, message: canonicalCheck.message });
+    process.exit(1);
+  }
   const results = [];
 
   let session;
@@ -119,13 +127,24 @@ run(STAGE, async () => {
     canonical_host: new URL(wsUrl).host,
     host_matches: !session.wsUrl || new URL(session.wsUrl).host === new URL(wsUrl).host,
   });
+  const sessionWsCheck = assertWebSocketUrl(session.wsUrl || wsUrl, config, contract.root.socket.path);
+  if (!sessionWsCheck.ok) {
+    emit({
+      ok: false,
+      stage: STAGE,
+      code: sessionWsCheck.code,
+      message: sessionWsCheck.message,
+      results,
+    });
+    process.exit(1);
+  }
 
   if (wantSession && !wantListen) {
     emit({ ok: true, stage: STAGE, code: "ok", spent_usd: formatDollars(BigInt(session.amountAtomic)), results });
     process.exit(0);
   }
 
-  const listenResult = await listen(wsUrl, session, duration);
+  const listenResult = await listen(session.wsUrl || wsUrl, session, duration);
   results.push(...listenResult.results);
 
   emit({
@@ -145,7 +164,8 @@ run(STAGE, async () => {
 /** S2 and S3: prove the socket upgrades, binds to our payer, and stays alive. */
 function listen(wsUrl, session, durationSec) {
   return new Promise((resolve) => {
-    const url = `${wsUrl}?${CONTRACT.socketTokenQueryParam}=${encodeURIComponent(session.token)}`;
+    const separator = wsUrl.includes("?") ? "&" : "?";
+    const url = `${wsUrl}${separator}${CONTRACT.socketTokenQueryParam}=${encodeURIComponent(session.token)}`;
     const socket = new WebSocket(url, { handshakeTimeout: 15_000 });
 
     let helloSeen = false;

@@ -11,13 +11,14 @@
 # runtime's secret store — see references/security.md.
 
 # --- Service, verified against the live deployment -------------------------
-WATCHTRENDS_API_BASE_URL=https://openclaw-customizations-production.up.railway.app
+WATCHTRENDS_API_BASE_URL=https://agents.smarterway.tech
+WATCHTRENDS_SERVICE_PREFIX=/services/watch-trends/v1
 
 # --- Payment safety pins ---------------------------------------------------
 # The buyer refuses to sign anything that does not match these exactly. They
 # are seller/protocol values, not your wallet.
 WATCHTRENDS_EXPECTED_PAY_TO=0x7f985b1764f79faa42a4622bb605b23c8eb5abea
-WATCHTRENDS_EXPECTED_NETWORK=base
+WATCHTRENDS_EXPECTED_NETWORK=eip155:8453
 WATCHTRENDS_EXPECTED_ASSET=0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
 
 # --- Buyer wallet ----------------------------------------------------------

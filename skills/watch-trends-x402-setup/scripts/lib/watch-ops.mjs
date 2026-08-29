@@ -6,6 +6,7 @@ import { PRICE_ATOMIC } from "./constants.mjs";
 import { payRequest } from "./x402.mjs";
 import { expiryFromResponse, recordRenew, recordStart, recordStop } from "./watches.mjs";
 import { SkillError } from "./cdp.mjs";
+import { apiUrl } from "./config.mjs";
 
 /**
  * Reject a start price that cannot be right.
@@ -55,7 +56,7 @@ export async function startWatch({ config, ticker, segment, threshold, startPric
 
   const result = await payRequest({
     method: "POST",
-    url: `${config.apiBaseUrl}/watches`,
+    url: apiUrl(config, "/watches"),
     body,
     config,
     dryRun,
@@ -80,7 +81,7 @@ export async function renewWatch({ config, ticker, dryRun }) {
   const symbol = String(ticker).toUpperCase();
   const result = await payRequest({
     method: "POST",
-    url: `${config.apiBaseUrl}/watches/${encodeURIComponent(symbol)}/renew`,
+    url: apiUrl(config, `/watches/${encodeURIComponent(symbol)}/renew`),
     body: {},
     config,
     dryRun,
@@ -98,7 +99,7 @@ export async function stopWatch({ config, ticker, dryRun }) {
   const symbol = String(ticker).toUpperCase();
   const result = await payRequest({
     method: "DELETE",
-    url: `${config.apiBaseUrl}/watches/${encodeURIComponent(symbol)}`,
+    url: apiUrl(config, `/watches/${encodeURIComponent(symbol)}`),
     body: {},
     config,
     dryRun,
@@ -115,7 +116,7 @@ export async function buySocketSession({ config, ttlMinutes }) {
 
   const result = await payRequest({
     method: "POST",
-    url: `${config.apiBaseUrl}/socket/session`,
+    url: apiUrl(config, "/socket/session"),
     body,
     config,
     route: "POST /socket/session",
@@ -128,6 +129,12 @@ export async function buySocketSession({ config, ttlMinutes }) {
   }
 
   const token = result.body?.token || result.body?.session_token || result.body?.session?.token;
+  if (result.body?.replay) {
+    throw new SkillError(
+      "socket_session_replay_unrecoverable",
+      "The payment was already used for a socket session, but the service did not return its token. Refusing to buy again automatically."
+    );
+  }
   if (!token) {
     throw new SkillError(
       "socket_protocol_unrecognized",
@@ -149,7 +156,7 @@ export async function buySocketSession({ config, ttlMinutes }) {
 /** Paid debug poll used only to recover signals missed during a socket gap. */
 export async function fetchEvents({ config, ticker, limit }) {
   const symbol = String(ticker).toUpperCase();
-  const url = new URL(`${config.apiBaseUrl}/watches/${encodeURIComponent(symbol)}/events`);
+  const url = new URL(apiUrl(config, `/watches/${encodeURIComponent(symbol)}/events`));
   if (limit) url.searchParams.set("limit", String(limit));
 
   return payRequest({

@@ -34,7 +34,7 @@ import {
   SPEND_ANOMALY_WARN_MULTIPLE,
   GAP_RECOVERY_EVENT_LIMIT,
 } from "./lib/constants.mjs";
-import { ensureStateDir, loadConfig, statePath } from "./lib/config.mjs";
+import { assertWebSocketUrl, ensureStateDir, loadConfig, statePath } from "./lib/config.mjs";
 import { inspect as inspectLock, tryAcquire } from "./lib/lock.mjs";
 import { deriveWsUrl, loadContract, recoveryAvailable, validateContract } from "./lib/contract.mjs";
 import { projectRun } from "./lib/costs.mjs";
@@ -205,7 +205,10 @@ class Supervisor {
   }
 
   async verifyContract() {
-    const contract = await loadContract(this.config.apiBaseUrl, { force: true });
+    const contract = await loadContract(this.config.apiBaseUrl, {
+      force: true,
+      servicePrefix: this.config.servicePrefix,
+    });
     const mismatches = validateContract(contract.root, contract.discovery);
     if (mismatches.length) {
       throw new SkillError(
@@ -316,12 +319,18 @@ class Supervisor {
     writeSessionMeta({
       created_at: new Date().toISOString(),
       expires_at: expiresAt,
-      ws_host: new URL(this.wsUrl).host,
+      ws_host: new URL(session.wsUrl || this.wsUrl).host,
       payer_prefix: mask(session.payer, 10),
       tx_prefix: session.txPrefix,
       amount_atomic: session.amountAtomic,
     });
 
+    this.wsUrl = session.wsUrl || this.wsUrl;
+    const wsCheck = assertWebSocketUrl(this.wsUrl, this.config, this.contract.root.socket.path);
+    if (!wsCheck.ok) {
+      clearSessionMeta();
+      throw new SkillError(wsCheck.code, wsCheck.message);
+    }
     this.session = { token: session.token, expiresAt, payer: session.payer };
     log("session_purchased", {
       reason,
@@ -376,7 +385,8 @@ class Supervisor {
   connect() {
     if (this.stopping || !this.session) return;
 
-    const url = `${this.wsUrl}?${CONTRACT.socketTokenQueryParam}=${encodeURIComponent(this.session.token)}`;
+    const separator = this.wsUrl.includes("?") ? "&" : "?";
+    const url = `${this.wsUrl}${separator}${CONTRACT.socketTokenQueryParam}=${encodeURIComponent(this.session.token)}`;
     const socket = new WebSocket(url, { handshakeTimeout: 15_000 });
     this.socket = socket;
 
@@ -548,13 +558,14 @@ class Supervisor {
     }
 
     if (mapped.action === "terminal") {
+      const terminalMessage = mapped.code === "socket_unauthorized"
+        ? "The service rejected the socket token. Stopping without buying again; inspect the paid session state before recovering."
+        : "Another client connected with this wallet and took over the single allowed connection. Stopping instead of buying another session, which would have billed you twice and started a tug of war.";
       log("terminal", {
         code: mapped.code,
         close_code: code,
         close_reason: reason,
-        message:
-          "Another client connected with this wallet and took over the single allowed connection. " +
-          "Stopping instead of buying another session, which would have billed you twice and started a tug of war.",
+        message: terminalMessage,
       });
       this.terminate(mapped.code);
       return;

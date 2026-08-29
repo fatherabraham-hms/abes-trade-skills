@@ -67,18 +67,22 @@ function writeCache(data) {
  * Fetch `GET /` and `GET /.well-known/x402.json`, honouring a short cache so an
  * agent looping doctor does not hammer the service.
  */
-export async function loadContract(apiBaseUrl, { force = false } = {}) {
+export async function loadContract(apiBaseUrl, { force = false, servicePrefix = CONTRACT.servicePrefix } = {}) {
   const cached = readCache();
   const ageSec = cached ? (Date.now() - Date.parse(cached.fetched_at)) / 1000 : Infinity;
-  if (!force && cached && cached.api_base_url === apiBaseUrl && ageSec < CONTRACT_CACHE_TTL_SEC) {
+  const normalizedPrefix = servicePrefix ? `/${servicePrefix.replace(/^\/+|\/+$/g, "")}` : "";
+  if (!force && cached && cached.api_base_url === apiBaseUrl &&
+      cached.service_prefix === normalizedPrefix && ageSec < CONTRACT_CACHE_TTL_SEC) {
     return { ...cached, from_cache: true, age_sec: Math.round(ageSec) };
   }
 
-  const root = await getJson(`${apiBaseUrl}/`);
-  const discovery = await getJson(`${apiBaseUrl}/.well-known/x402.json`);
+  const prefix = normalizedPrefix;
+  const root = await getJson(`${apiBaseUrl}${prefix}/`);
+  const discovery = await getJson(`${apiBaseUrl}${prefix}/x402.json`);
 
   const record = {
     api_base_url: apiBaseUrl,
+    service_prefix: prefix,
     fetched_at: new Date().toISOString(),
     server_date: root.dateHeader || discovery.dateHeader || null,
     root: root.body,
@@ -88,9 +92,10 @@ export async function loadContract(apiBaseUrl, { force = false } = {}) {
   return { ...record, from_cache: false, age_sec: 0 };
 }
 
-export async function loadHealth(apiBaseUrl) {
+export async function loadHealth(apiBaseUrl, servicePrefix = CONTRACT.servicePrefix) {
   const health = await getJson(`${apiBaseUrl}/health`);
-  const ready = await getJson(`${apiBaseUrl}/ready`);
+  const prefix = servicePrefix ? `/${servicePrefix.replace(/^\/+|\/+$/g, "")}` : "";
+  const ready = await getJson(`${apiBaseUrl}${prefix}/ready`);
   return {
     health_ok: health.status === 200 && health.body?.ok === true,
     ready_ok: ready.status === 200 && ready.body?.ok === true,
@@ -120,7 +125,7 @@ export function clockSkewAcceptable(skewSec) {
  */
 export function contractHash(root, discovery) {
   const resources = (discovery?.resources || [])
-    .map((r) => `${r.method} ${r.resource} ${r?.x402?.scheme ?? ""} ${r?.x402?.maxAmountRequired ?? ""}`)
+    .map((r) => `${r.method} ${r.resource} ${r?.x402?.scheme ?? ""} ${r?.x402?.amount ?? r?.x402?.maxAmountRequired ?? ""}`)
     .sort();
   const normalized = {
     version: discovery?.version ?? null,
@@ -168,6 +173,7 @@ export function validateContract(root, discovery) {
   };
 
   check("discovery.version", discovery?.version, CONTRACT.discoveryVersion);
+  check("discovery.x402Version", discovery?.x402Version, CONTRACT.x402Version);
   check("socket.path", root?.socket?.path, CONTRACT.socketPath);
   check("socket.query", root?.socket?.query, CONTRACT.socketTokenQueryParam);
   check("socket.session_ttl_minutes", root?.socket?.session_ttl_minutes, CONTRACT.sessionTtlMinutes);
@@ -177,10 +183,10 @@ export function validateContract(root, discovery) {
   check("socket.client_must_pong", root?.socket?.client_must_pong, CONTRACT.clientMustPong);
   check("lease_window_minutes", root?.lease_window_minutes, CONTRACT.leaseWindowMinutes);
 
-  const session = findResource(discovery, "POST", "/socket/session");
+  const session = findResource(discovery, "POST", `${CONTRACT.servicePrefix}/socket/session`);
   if (!session) {
     mismatches.push({ field: "resources[POST /socket/session]", actual: null, expected: "present" });
-  } else if (String(session?.x402?.maxAmountRequired) !== "10000") {
+  } else if (String(session?.x402?.amount ?? session?.x402?.maxAmountRequired) !== "10000") {
     mismatches.push({
       field: "resources[POST /socket/session].x402.maxAmountRequired",
       actual: String(session?.x402?.maxAmountRequired),
@@ -188,7 +194,7 @@ export function validateContract(root, discovery) {
     });
   }
 
-  const start = findResource(discovery, "POST", "/watches");
+  const start = findResource(discovery, "POST", `${CONTRACT.servicePrefix}/watches`);
   if (!start) {
     mismatches.push({ field: "resources[POST /watches]", actual: null, expected: "present" });
   } else {
@@ -209,13 +215,15 @@ export function validateContract(root, discovery) {
 
 export function findResource(discovery, method, resource) {
   return (discovery?.resources || []).find(
-    (r) => String(r.method).toUpperCase() === method && r.resource === resource
+    (r) => String(r.method).toUpperCase() === method && (
+      r.resource === resource || String(r.resource || "").endsWith(resource)
+    )
   );
 }
 
 /** Gap recovery is only offered when discovery still advertises the route. */
 export function recoveryAvailable(discovery) {
-  return Boolean(findResource(discovery, "GET", "/watches/{ticker}/events"));
+  return Boolean(findResource(discovery, "GET", `${CONTRACT.servicePrefix}/watches/{ticker}/events`));
 }
 
 export function deriveWsUrl(apiBaseUrl, socketPath) {
@@ -244,7 +252,8 @@ export function parsePaymentRequired(headerValue) {
   if (!Array.isArray(accepts) || accepts.length === 0) {
     return { ok: false, code: "unparseable_payment_required", message: "PAYMENT-REQUIRED carried no accepts entry." };
   }
-  return { ok: true, requirement: accepts[0], all: accepts };
+  const resource = typeof parsed.resource === "string" ? parsed.resource : parsed.resource?.url;
+  return { ok: true, requirement: accepts[0], all: accepts, resource, version: parsed.x402Version };
 }
 
 /**

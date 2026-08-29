@@ -28,11 +28,11 @@ act on it without parsing prose.
 
 | Action | Price | Notes |
 |---|---:|---|
-| `POST /watches` (start) | $0.01 | Once per ticker |
-| `POST /watches/{t}/renew` | $0.01 | Every 30 min per ticker |
-| `POST /socket/session` | $0.01 | Every 25 min, per wallet not per ticker |
-| `DELETE /watches/{t}` (stop) | $0.01 | Teardown is also paid |
-| `GET /watches/{t}/events` | $0.01 | Gap recovery only |
+| `POST /services/watch-trends/v1/watches` (start) | $0.01 | Once per ticker |
+| `POST /services/watch-trends/v1/watches/{t}/renew` | $0.01 | Every 30 min per ticker |
+| `POST /services/watch-trends/v1/socket/session` | $0.01 | Every 25 min, per wallet not per ticker |
+| `DELETE /services/watch-trends/v1/watches/{t}` (stop) | $0.01 | Teardown is also paid |
+| `GET /services/watch-trends/v1/watches/{t}/events` | $0.01 | Gap recovery only |
 
 One ticker running continuously costs about **$1.06/day**. This is a recurring charge,
 not a setup fee — say so plainly before the first payment.
@@ -125,11 +125,10 @@ on any failure and use its `next_action` verbatim. Never attempt payment past a
 `service_not_ready`, `service_contract_mismatch`, or `clock_skew_detected`.
 
 **6. Notification channel** — one user prompt, before spending
-Default to Telegram: walk the user through `references/notifications.md`, have them set
-`TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in their secret store, and set
-`WATCHTRENDS_NOTIFY_CMD=scripts/notify-telegram.sh`. Verify with
-`node scripts/doctor.mjs --notify`, which sends no message. If they decline a channel,
-say plainly that signals will be spooled but only visible when they next ask you.
+Run `node scripts/detect-notify.mjs` first. Prefer an existing OpenClaw, Hermes, or
+Telegram channel; do not create a new bot by default. Apply only after user consent,
+then verify with `node scripts/doctor.mjs --notify`, which sends no message. If no
+channel exists, use spool-only or offer desktop notifications.
 
 **7. Start the watch** — `scripts/start-watch.sh <ticker> <segment> <threshold> --start-price <p>`
 Get the current price from your own market-data capability or ask the user. **Echo the
@@ -166,8 +165,8 @@ The codes that must **never** trigger a retry that spends money:
 
 ## Known limitations to disclose honestly
 
-- The service signal hub is single-replica and in-process. A redeploy drops connections
-  and any signal emitted in that window. **Do not claim guaranteed delivery.**
+- The origin uses Postgres-backed admission and LISTEN/NOTIFY fan-out, but a redeploy
+  or measurable socket gap can still lose real-time delivery. **Do not claim guaranteed delivery.**
 - Only trend signals are pushed. Money and health events — cap reached, spend anomaly,
   gaps, terminal socket errors — stay in the log and `status.mjs`. That is why step 6
   of the monitoring habit matters: if the supervisor stops, nothing pings the user.

@@ -11,9 +11,10 @@ export const USDC_DECIMALS = 6;
 export const USDC_BASE_ASSET = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 export const BASE_CHAIN_ID = 8453;
 
-export const DEFAULT_API_BASE_URL = "https://openclaw-customizations-production.up.railway.app";
+export const DEFAULT_API_BASE_URL = "https://agents.smarterway.tech";
+export const DEFAULT_SERVICE_PREFIX = "/services/watch-trends/v1";
 export const DEFAULT_PAY_TO = "0x7f985b1764f79faa42a4622bb605b23c8eb5abea";
-export const DEFAULT_NETWORK = "base";
+export const DEFAULT_NETWORK = "eip155:8453";
 
 /** Dedicated buyer account. Never the user's general trading wallet. */
 export const DEFAULT_CDP_ACCOUNT_NAME = "WatchTrendsBuyer";
@@ -46,8 +47,10 @@ export const DEFAULT_DAILY_LIMIT_ATOMIC = 200_000_000n; // $200.00/day runaway c
 
 /** Service contract, mirrored from GET / on the deployed service. */
 export const CONTRACT = {
-  discoveryVersion: "1",
-  socketPath: "/ws/signals",
+  discoveryVersion: "2",
+  x402Version: 2,
+  servicePrefix: DEFAULT_SERVICE_PREFIX,
+  socketPath: `${DEFAULT_SERVICE_PREFIX}/ws/signals`,
   socketTokenQueryParam: "token",
   sessionTtlMinutes: 30,
   pingIntervalSec: 25,
@@ -128,14 +131,11 @@ export const CLOSE_CODE_ACTIONS = {
   1006: { action: "reconnect", code: "socket_unavailable" },
   1011: { action: "reconnect", code: "socket_unavailable" },
   1012: { action: "reconnect", code: "socket_unavailable" },
-  1013: { action: "reconnect", code: "socket_unavailable" },
-  4000: { action: "rebuy", code: "socket_session_expired" },
+  1013: { action: "backoff", code: "too_many_connections" },
   4001: { action: "terminal", code: "socket_replaced_elsewhere" },
-  4003: { action: "reconnect", code: "pong_timeout" },
-  4008: { action: "backoff", code: "too_many_connections" },
-  4401: { action: "terminal", code: "socket_replaced_elsewhere" },
-  4408: { action: "rebuy", code: "socket_session_expired" },
-  4429: { action: "backoff", code: "too_many_connections" },
+  4002: { action: "rebuy", code: "socket_session_expired" },
+  4003: { action: "reconnect", code: "socket_zombie" },
+  4401: { action: "terminal", code: "socket_unauthorized" },
 };
 
 /** Frame types the client is willing to act on. Anything else fails closed. */
