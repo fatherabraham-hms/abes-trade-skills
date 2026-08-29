@@ -34,7 +34,7 @@ import {
   SPEND_ANOMALY_WARN_MULTIPLE,
   GAP_RECOVERY_EVENT_LIMIT,
 } from "./lib/constants.mjs";
-import { ensureStateDir, loadConfig, statePath } from "./lib/config.mjs";
+import { assertWebSocketUrl, ensureStateDir, loadConfig, statePath } from "./lib/config.mjs";
 import { inspect as inspectLock, tryAcquire } from "./lib/lock.mjs";
 import { deriveWsUrl, loadContract, recoveryAvailable, validateContract } from "./lib/contract.mjs";
 import { projectRun } from "./lib/costs.mjs";
@@ -326,6 +326,11 @@ class Supervisor {
     });
 
     this.wsUrl = session.wsUrl || this.wsUrl;
+    const wsCheck = assertWebSocketUrl(this.wsUrl, this.config, this.contract.root.socket.path);
+    if (!wsCheck.ok) {
+      clearSessionMeta();
+      throw new SkillError(wsCheck.code, wsCheck.message);
+    }
     this.session = { token: session.token, expiresAt, payer: session.payer };
     log("session_purchased", {
       reason,

@@ -380,7 +380,7 @@ async function stageX402Gate(config) {
       "The 402 response carried no usable payment terms. No payment was attempted.");
   }
 
-  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url, parsed.resource);
+  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url, parsed.resource, parsed.version);
   if (mismatches.length) {
     return failStage("x402-gate", "payment_requirements_rejected",
       `The server's payment terms differ from local safety policy: ${mismatches
@@ -422,7 +422,7 @@ async function stageDryRun(config) {
   if (!parsed.ok) {
     return failStage("dry-run-payment", parsed.code, parsed.message, "No payment was attempted.");
   }
-  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url, parsed.resource);
+  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url, parsed.resource, parsed.version);
   if (mismatches.length) {
     return failStage("dry-run-payment", "payment_requirements_rejected",
       `The buyer would refuse this request: ${mismatches.map((m) => m.field).join(", ")} outside policy.`,

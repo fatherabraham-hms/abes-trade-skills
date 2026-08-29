@@ -70,11 +70,13 @@ function writeCache(data) {
 export async function loadContract(apiBaseUrl, { force = false, servicePrefix = CONTRACT.servicePrefix } = {}) {
   const cached = readCache();
   const ageSec = cached ? (Date.now() - Date.parse(cached.fetched_at)) / 1000 : Infinity;
-  if (!force && cached && cached.api_base_url === apiBaseUrl && ageSec < CONTRACT_CACHE_TTL_SEC) {
+  const normalizedPrefix = servicePrefix ? `/${servicePrefix.replace(/^\/+|\/+$/g, "")}` : "";
+  if (!force && cached && cached.api_base_url === apiBaseUrl &&
+      cached.service_prefix === normalizedPrefix && ageSec < CONTRACT_CACHE_TTL_SEC) {
     return { ...cached, from_cache: true, age_sec: Math.round(ageSec) };
   }
 
-  const prefix = servicePrefix ? `/${servicePrefix.replace(/^\/+|\/+$/g, "")}` : "";
+  const prefix = normalizedPrefix;
   const root = await getJson(`${apiBaseUrl}${prefix}/`);
   const discovery = await getJson(`${apiBaseUrl}${prefix}/x402.json`);
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { apiPath } from "../scripts/lib/config.mjs";
+import { apiPath, assertWebSocketUrl } from "../scripts/lib/config.mjs";
 import {
   CONTRACT,
   CLOSE_CODE_ACTIONS,
@@ -93,8 +93,10 @@ test("normalizes legacy Base network aliases without weakening asset checks", ()
     asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     payTo: "0x7f985b1764f79faa42a4622bb605b23c8eb5abea",
     maxAmountAtomic: 10000n,
+    expectedX402Version: 2,
   }, `https://agents.smarterway.tech${prefix}/socket/session`,
-  `https://agents.smarterway.tech${prefix}/socket/session`);
+  `https://agents.smarterway.tech${prefix}/socket/session`,
+  2);
   assert.deepEqual(result.mismatches, []);
 });
 
@@ -103,4 +105,42 @@ test("uses origin WebSocket close-code semantics", () => {
   assert.equal(CLOSE_CODE_ACTIONS[1013].action, "backoff");
   assert.equal(CLOSE_CODE_ACTIONS[4401].action, "terminal");
   assert.equal(CONTRACT.socketPath, `${prefix}/ws/signals`);
+});
+
+test("rejects an untrusted WebSocket endpoint", () => {
+  const config = { apiBaseUrl: "https://agents.smarterway.tech" };
+  assert.equal(
+    assertWebSocketUrl(
+      "wss://attacker.example/services/watch-trends/v1/ws/signals",
+      config,
+      `${prefix}/ws/signals`,
+    ).code,
+    "ws_url_host_mismatch",
+  );
+  assert.equal(
+    assertWebSocketUrl(
+      "wss://agents.smarterway.tech/services/watch-trends/v1/ws/signals",
+      config,
+      `${prefix}/ws/signals`,
+    ).ok,
+    true,
+  );
+});
+
+test("requires the v2 challenge version and outer resource URL", () => {
+  const result = validateRequirement(
+    discovery.resources[0].x402,
+    {
+      network: "eip155:8453",
+      asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      payTo: "0x7f985b1764f79faa42a4622bb605b23c8eb5abea",
+      maxAmountAtomic: 10000n,
+      expectedX402Version: 2,
+    },
+    `https://agents.smarterway.tech${prefix}/socket/session`,
+    null,
+    1,
+  );
+  assert.ok(result.mismatches.some((m) => m.field === "x402Version"));
+  assert.ok(result.mismatches.some((m) => m.field === "resource.url"));
 });

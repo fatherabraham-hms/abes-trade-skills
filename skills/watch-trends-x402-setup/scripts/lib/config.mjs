@@ -151,6 +151,7 @@ export function loadConfig() {
   return {
     apiBaseUrl,
     servicePrefix: servicePrefix === "/." ? "" : servicePrefix,
+    expectedX402Version: 2,
     payTo: String(read("WATCHTRENDS_EXPECTED_PAY_TO", DEFAULT_PAY_TO)).trim().toLowerCase(),
     network: String(read("WATCHTRENDS_EXPECTED_NETWORK", DEFAULT_NETWORK)).trim(),
     asset: String(read("WATCHTRENDS_EXPECTED_ASSET", USDC_BASE_ASSET)).trim(),
@@ -176,6 +177,30 @@ export function apiPath(config, suffix) {
 
 export function apiUrl(config, suffix) {
   return `${config.apiBaseUrl}${apiPath(config, suffix)}`;
+}
+
+export function assertWebSocketUrl(url, config, expectedPath) {
+  let actual;
+  let base;
+  try {
+    actual = new URL(url);
+    base = new URL(config.apiBaseUrl);
+  } catch {
+    return { ok: false, code: "invalid_ws_url", message: "The service returned an invalid WebSocket URL." };
+  }
+  const expectedScheme = process.env.WATCHTRENDS_TEST_MODE === "1" && base.hostname === "localhost"
+    ? "ws:"
+    : "wss:";
+  if (actual.protocol !== expectedScheme) {
+    return { ok: false, code: "invalid_ws_url", message: `Refusing a WebSocket URL that does not use ${expectedScheme}.` };
+  }
+  if (actual.host !== base.host) {
+    return { ok: false, code: "ws_url_host_mismatch", message: "The service returned a WebSocket URL on a different host; refusing to send the session token there." };
+  }
+  if (actual.pathname !== expectedPath) {
+    return { ok: false, code: "ws_url_path_mismatch", message: "The service returned a WebSocket URL with an unexpected path." };
+  }
+  return { ok: true, url: actual };
 }
 
 /**

@@ -41,7 +41,13 @@ function normalizeNetwork(network) {
  * Compare the server's payment requirement to the local safety pins.
  * Returns the list of mismatching fields; empty means safe to sign.
  */
-export function validateRequirement(requirement, config, requestUrl, resourceUrl = null) {
+export function validateRequirement(
+  requirement,
+  config,
+  requestUrl,
+  resourceUrl = null,
+  challengeVersion = null,
+) {
   const mismatches = [];
   const add = (field, actual, expected) => mismatches.push({ field, actual: actual ?? null, expected });
 
@@ -73,10 +79,12 @@ export function validateRequirement(requirement, config, requestUrl, resourceUrl
 
   // The resource must be the URL we actually called, so a 402 from one route
   // cannot authorize a payment aimed at another.
-  if (config.expectedX402Version && Number(requirement.x402Version || config.expectedX402Version) !== config.expectedX402Version) {
-    add("x402Version", requirement.x402Version, config.expectedX402Version);
+  if (Number(challengeVersion) !== Number(config.expectedX402Version)) {
+    add("x402Version", challengeVersion, config.expectedX402Version);
   }
-  if (resourceUrl) {
+  if (!resourceUrl) {
+    add("resource.url", null, "the called URL");
+  } else {
     const declared = String(resourceUrl).split("?")[0].replace(/\/+$/, "");
     const called = String(requestUrl).split("?")[0].replace(/\/+$/, "");
     if (declared !== called) add("resource", declared, called);
@@ -140,7 +148,13 @@ export async function payRequest({ method = "POST", url, body = {}, config, dryR
   const parsed = parsePaymentRequired(initial.headers.get("payment-required"));
   if (!parsed.ok) throw new SkillError(parsed.code, parsed.message);
 
-  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url, parsed.resource);
+  const { mismatches, amount } = validateRequirement(
+    parsed.requirement,
+    config,
+    url,
+    parsed.resource,
+    parsed.version,
+  );
   if (mismatches.length) {
     throw new SkillError(
       "payment_requirements_rejected",
@@ -264,7 +278,19 @@ export async function payRequest({ method = "POST", url, body = {}, config, dryR
 
   const txPrefix = settlementPrefix(response.headers.get("payment-response"));
 
-  if (response.ok) {
+  const responseBody = tryParse(text);
+  const responseCode = responseBody?.error?.code || responseBody?.code;
+  const preSettlementFailure = !txPrefix && [
+    "backend_unavailable",
+    "at_capacity",
+    "facilitator_busy",
+    "facilitator_misconfigured",
+    "facilitator_auth_misconfigured",
+  ].includes(responseCode);
+
+  if (preSettlementFailure) {
+    await rollback(reservation.reservation_id, responseCode);
+  } else if (response.ok) {
     await commit(reservation.reservation_id, { txPrefix });
   } else {
     // A non-2xx answer means the service did not deliver what we paid for. The
@@ -273,10 +299,10 @@ export async function payRequest({ method = "POST", url, body = {}, config, dryR
     await commit(reservation.reservation_id, { txPrefix, status: `rejected_after_signing:${response.status}` });
   }
 
-  const parsedBody = tryParse(text);
+  const parsedBody = responseBody;
   const result = {
     ok: response.ok,
-    paid: true,
+    paid: !preSettlementFailure,
     status: response.status,
     amount_atomic: amount.toString(),
     payer: account.address,
@@ -293,6 +319,9 @@ export async function payRequest({ method = "POST", url, body = {}, config, dryR
 
 function classifyPaymentFailure(status, body) {
   const serverCode = String(body?.error?.code || body?.code || "").toLowerCase();
+  if (serverCode) {
+    return serverCode;
+  }
   if (status === 402) {
     if (serverCode.includes("insufficient") || serverCode.includes("balance")) return "wallet_needs_usdc";
     return "payment_not_accepted";
