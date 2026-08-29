@@ -7,25 +7,26 @@ is 3 minutes" is the difference between $1/day and $10/day.
 
 ## Verified against the live deployment
 
-Read from `GET /` and `GET /.well-known/x402.json` at
-`https://openclaw-customizations-production.up.railway.app`.
+Read from `GET /services/watch-trends/v1/` and
+`GET /services/watch-trends/v1/x402.json` at
+`https://agents.smarterway.tech`.
 
 ### Paid routes
 
 | Route | Price | Body |
 |---|---:|---|
-| `POST /watches` | 10000 | required `ticker`, `segment`, `threshold`, `start_price`; optional `webhook_url`, `confidence`, `asset_type` (`crypto`\|`stock`) |
-| `POST /watches/{ticker}/renew` | 10000 | empty |
-| `DELETE /watches/{ticker}` | 10000 | empty |
-| `POST /socket/session` | 10000 | optional `ttl_minutes`, max 30 |
-| `GET /watches` | 10000 | empty |
-| `GET /watches/{ticker}/events` | 10000 | optional `limit`; flagged `debug:true` |
+| `POST /services/watch-trends/v1/watches` | 10000 | required `ticker`, `segment`, `threshold`, `start_price`; optional `webhook_url`, `confidence`, `asset_type` (`crypto`\|`stock`) |
+| `POST /services/watch-trends/v1/watches/{ticker}/renew` | 10000 | empty |
+| `DELETE /services/watch-trends/v1/watches/{ticker}` | 10000 | empty |
+| `POST /services/watch-trends/v1/socket/session` | 10000 | optional `ttl_minutes`, max 30 |
+| `GET /services/watch-trends/v1/watches` | 10000 | empty |
+| `GET /services/watch-trends/v1/watches/{ticker}/events` | 10000 | optional `limit`; flagged `debug:true` |
 
 ### Socket
 
 ```
-path                     /ws/signals
-auth                     token query param from POST /socket/session
+path                     /services/watch-trends/v1/ws/signals
+auth                     token query param from POST /services/watch-trends/v1/socket/session
 session_ttl_minutes      30
 ping_interval_sec        25
 pong_timeout_sec         10
@@ -34,16 +35,16 @@ client_must_pong         true
 lease_window_minutes     30
 ```
 
-### Payment requirement on `/socket/session`
+### Payment requirement on `/services/watch-trends/v1/socket/session`
 
 ```
 scheme              exact
-network             base
+network             eip155:8453
 asset               0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913   (Base USDC)
 payTo               0x7f985b1764f79faa42a4622bb605b23c8eb5abea
-maxAmountRequired   10000
+amount              10000
 maxTimeoutSeconds   60
-resource            https://openclaw-customizations-production.up.railway.app/socket/session
+resource            https://agents.smarterway.tech/services/watch-trends/v1/socket/session
 extra               { name: "USD Coin", version: "2" }            (EIP-712 domain)
 ```
 
@@ -72,39 +73,34 @@ with a funded wallet attached.
 
 ### WebSocket message catalog
 
-Only `hello`, `ping`, `pong`, and `signal` are handled. Any other frame type, a signal
-without a payload, or a signal without a `disclosure` closes the socket as
-`socket_protocol_unrecognized` and stops. **Needed:** the complete list of frames the
-server may send.
+The current origin sends `hello`, `ping`, and `signal`; the client also accepts `pong`.
+Any other frame type, a signal without a payload, or a signal without a `disclosure`
+closes the socket as `socket_protocol_unrecognized` and stops.
 
 ### Close-code table
 
-The mapping in `constants.mjs` assumes:
+The origin implementation defines:
 
 | Code | Assumed meaning | Consequence if wrong |
 |---|---|---|
-| 4000, 4408 | Session expired | Would re-buy when it should not — costs money |
-| 4001, 4401 | Replaced / unauthorized | Treated as terminal; if actually transient, delivery stops unnecessarily |
+| 4001 | Replaced | Treated as terminal; no re-buy |
+| 4002 | Session expired | Re-buy, subject to the paid-session limiter |
 | 4003 | Pong deadline exceeded | Reconnects on the same token |
-| 4008, 4429 | Rate limited | Longer backoff |
+| 1013 | Capacity | Must back off without spending |
+| 4401 | Unauthorized token | Stop; do not blindly buy again |
 
 Any code outside this set stops with the raw code surfaced and no further spend.
-**Needed:** the authoritative table. "Re-buy" versus "never re-buy" hinges on it, and
-getting it wrong costs real money in one direction and lost signals in the other.
 
 ### Replica and delivery policy
 
-The signal hub is in-process and single-replica today. A redeploy or a second replica
-silently drops connections and any signal emitted in that window. The skill discloses
-this and **does not claim at-least-once delivery**. Redis-backed pub/sub on the service
-side would remove the disclaimer.
+The origin uses Postgres-backed global admission and LISTEN/NOTIFY fan-out. A redeploy
+or measurable socket gap can still drop real-time delivery, so the skill reports gaps
+and does not claim at-least-once delivery.
 
 ### Session overlap on re-buy
 
-Whether buying a new session immediately evicts the existing socket is unconfirmed. The
-supervisor assumes eviction: it closes the old socket first and records a gap window.
-That is the safe assumption either way — if the service actually allows overlap, the
-recorded gap is spuriously reported but nothing breaks.
+Buying a new session replaces the existing payer connection. The supervisor closes the
+old socket first and records the resulting gap window.
 
 ### Renew response shape
 

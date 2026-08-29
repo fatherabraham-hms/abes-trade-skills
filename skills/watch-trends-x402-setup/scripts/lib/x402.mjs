@@ -31,16 +31,24 @@ const TRANSFER_WITH_AUTHORIZATION_TYPES = {
   ],
 };
 
+function normalizeNetwork(network) {
+  const value = String(network || "").trim().toLowerCase();
+  if (value === "base" || value === "base-mainnet" || value === "eip155:8453") return "eip155:8453";
+  return value;
+}
+
 /**
  * Compare the server's payment requirement to the local safety pins.
  * Returns the list of mismatching fields; empty means safe to sign.
  */
-export function validateRequirement(requirement, config, requestUrl) {
+export function validateRequirement(requirement, config, requestUrl, resourceUrl = null) {
   const mismatches = [];
   const add = (field, actual, expected) => mismatches.push({ field, actual: actual ?? null, expected });
 
   if (String(requirement.scheme) !== "exact") add("scheme", requirement.scheme, "exact");
-  if (String(requirement.network) !== config.network) add("network", requirement.network, config.network);
+  if (normalizeNetwork(requirement.network) !== normalizeNetwork(config.network)) {
+    add("network", requirement.network, config.network);
+  }
   if (String(requirement.asset || "").toLowerCase() !== config.asset.toLowerCase()) {
     add("asset", requirement.asset, config.asset);
   }
@@ -65,8 +73,11 @@ export function validateRequirement(requirement, config, requestUrl) {
 
   // The resource must be the URL we actually called, so a 402 from one route
   // cannot authorize a payment aimed at another.
-  if (requirement.resource) {
-    const declared = String(requirement.resource).split("?")[0].replace(/\/+$/, "");
+  if (config.expectedX402Version && Number(requirement.x402Version || config.expectedX402Version) !== config.expectedX402Version) {
+    add("x402Version", requirement.x402Version, config.expectedX402Version);
+  }
+  if (resourceUrl) {
+    const declared = String(resourceUrl).split("?")[0].replace(/\/+$/, "");
     const called = String(requestUrl).split("?")[0].replace(/\/+$/, "");
     if (declared !== called) add("resource", declared, called);
   }
@@ -129,7 +140,7 @@ export async function payRequest({ method = "POST", url, body = {}, config, dryR
   const parsed = parsePaymentRequired(initial.headers.get("payment-required"));
   if (!parsed.ok) throw new SkillError(parsed.code, parsed.message);
 
-  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url);
+  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url, parsed.resource);
   if (mismatches.length) {
     throw new SkillError(
       "payment_requirements_rejected",
@@ -147,7 +158,7 @@ export async function payRequest({ method = "POST", url, body = {}, config, dryR
       pay_to: String(parsed.requirement.payTo).toLowerCase(),
       network: parsed.requirement.network,
       asset: parsed.requirement.asset,
-      resource: parsed.requirement.resource,
+      resource: parsed.resource,
     };
   }
 
@@ -205,7 +216,7 @@ export async function payRequest({ method = "POST", url, body = {}, config, dryR
     });
 
     const paymentPayload = {
-      x402Version: 1,
+      x402Version: 2,
       scheme: "exact",
       network: parsed.requirement.network,
       accepted: parsed.requirement,
@@ -223,16 +234,29 @@ export async function payRequest({ method = "POST", url, body = {}, config, dryR
       },
     };
 
-    response = await fetchWithTimeout(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "PAYMENT-SIGNATURE": Buffer.from(JSON.stringify(paymentPayload)).toString("base64"),
-      },
-      body: hasBody ? JSON.stringify(body) : undefined,
-    });
-    text = await response.text();
+    const paymentSignature = Buffer.from(JSON.stringify(paymentPayload)).toString("base64");
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      response = await fetchWithTimeout(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "PAYMENT-SIGNATURE": paymentSignature,
+        },
+        body: hasBody ? JSON.stringify(body) : undefined,
+      });
+      text = await response.text();
+      let retryBody = null;
+      try {
+        retryBody = JSON.parse(text);
+      } catch {
+        /* not JSON */
+      }
+      const retryCode = retryBody?.error?.code || retryBody?.code;
+      if (response.status !== 503 || retryCode !== "forward_pending" || attempt === 2) break;
+      const retryAfter = Number(response.headers.get("retry-after") || 2);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(retryAfter, 1), 15) * 1000));
+    }
   } catch (err) {
     await rollback(reservation.reservation_id, "signing_or_transport_failed");
     throw err;

@@ -22,6 +22,7 @@ import {
   cdpCredentialStatus,
   ensureStateDir,
   loadConfig,
+  apiUrl,
   missingCdpCredentials,
   checkWalletIsolation,
   assertUrlAllowed,
@@ -224,7 +225,7 @@ async function stageConfig(config) {
 async function stageService(config) {
   let health;
   try {
-    health = await loadHealth(config.apiBaseUrl);
+    health = await loadHealth(config.apiBaseUrl, config.servicePrefix);
   } catch (err) {
     return failStage("service", "service_unhealthy",
       `Could not reach ${config.apiBaseUrl}: ${err.message}`,
@@ -261,7 +262,7 @@ async function stageService(config) {
 async function stageDiscovery(config, force) {
   let contract;
   try {
-    contract = await loadContract(config.apiBaseUrl, { force });
+    contract = await loadContract(config.apiBaseUrl, { force, servicePrefix: config.servicePrefix });
   } catch (err) {
     return {
       contract: null,
@@ -357,7 +358,7 @@ async function stageX402Gate(config) {
     };
   }
 
-  const url = `${config.apiBaseUrl}/socket/session`;
+  const url = apiUrl(config, "/socket/session");
   let probe;
   try {
     probe = await probePaymentGate(url, { method: "POST", body: {} });
@@ -379,7 +380,7 @@ async function stageX402Gate(config) {
       "The 402 response carried no usable payment terms. No payment was attempted.");
   }
 
-  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url);
+  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url, parsed.resource);
   if (mismatches.length) {
     return failStage("x402-gate", "payment_requirements_rejected",
       `The server's payment terms differ from local safety policy: ${mismatches
@@ -392,7 +393,7 @@ async function stageX402Gate(config) {
     stage: "x402-gate",
     ok: true,
     code: "ok",
-    resource: parsed.requirement.resource,
+    resource: parsed.resource,
     scheme: parsed.requirement.scheme,
     network: parsed.requirement.network,
     asset: parsed.requirement.asset,
@@ -406,7 +407,7 @@ async function stageX402Gate(config) {
 /* --------------------------------------------------------- D5 dry-run pay */
 
 async function stageDryRun(config) {
-  const url = `${config.apiBaseUrl}/socket/session`;
+  const url = apiUrl(config, "/socket/session");
   const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -421,7 +422,7 @@ async function stageDryRun(config) {
   if (!parsed.ok) {
     return failStage("dry-run-payment", parsed.code, parsed.message, "No payment was attempted.");
   }
-  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url);
+  const { mismatches, amount } = validateRequirement(parsed.requirement, config, url, parsed.resource);
   if (mismatches.length) {
     return failStage("dry-run-payment", "payment_requirements_rejected",
       `The buyer would refuse this request: ${mismatches.map((m) => m.field).join(", ")} outside policy.`,

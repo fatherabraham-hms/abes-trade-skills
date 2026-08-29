@@ -77,7 +77,10 @@ run(STAGE, async () => {
     process.exit(1);
   }
 
-  const contract = await loadContract(config.apiBaseUrl, { force: true });
+  const contract = await loadContract(config.apiBaseUrl, {
+    force: true,
+    servicePrefix: config.servicePrefix,
+  });
   const mismatches = validateContract(contract.root, contract.discovery);
   if (mismatches.length) {
     emit({
@@ -125,7 +128,7 @@ run(STAGE, async () => {
     process.exit(0);
   }
 
-  const listenResult = await listen(wsUrl, session, duration);
+  const listenResult = await listen(session.wsUrl || wsUrl, session, duration);
   results.push(...listenResult.results);
 
   emit({
@@ -145,7 +148,8 @@ run(STAGE, async () => {
 /** S2 and S3: prove the socket upgrades, binds to our payer, and stays alive. */
 function listen(wsUrl, session, durationSec) {
   return new Promise((resolve) => {
-    const url = `${wsUrl}?${CONTRACT.socketTokenQueryParam}=${encodeURIComponent(session.token)}`;
+    const separator = wsUrl.includes("?") ? "&" : "?";
+    const url = `${wsUrl}${separator}${CONTRACT.socketTokenQueryParam}=${encodeURIComponent(session.token)}`;
     const socket = new WebSocket(url, { handshakeTimeout: 15_000 });
 
     let helloSeen = false;

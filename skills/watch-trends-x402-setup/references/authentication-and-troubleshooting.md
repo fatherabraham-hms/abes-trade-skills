@@ -19,7 +19,7 @@ the identity:
    `PAYMENT-REQUIRED` terms, validates them against local pins, signs an EIP-3009
    `TransferWithAuthorization`, and retries with a `PAYMENT-SIGNATURE` header.
 5. The service settles through its facilitator and treats the settling wallet as the
-   owner. `POST /socket/session` returns an opaque token; the socket is bound to that
+   owner. `POST /services/watch-trends/v1/socket/session` returns an opaque token; the socket is bound to that
    payer.
 
 The token lives in the supervisor's memory only. It is never written to disk, never
@@ -62,6 +62,9 @@ mitigation. Nothing in transit is exposed — the connection is `wss://`.
 | `budget_locked` | Another buyer holds the ledger mutex | Nothing was attempted. Retry in a moment |
 | `redirect_refused` | The service tried to redirect a payment request | Refused deliberately. Report to the operator |
 | `probe_rate_limited` | The unpaid 402 probe ran 6+ times this hour | Not a failure. The cached verdict stands; rerun with `--force` later |
+| `backend_unavailable` / `at_capacity` | The origin rejected a paid request during preflight | No settlement occurred. Honor `Retry-After` and retry later; do not create a new payment immediately |
+| `forward_pending` | Payment settled but forwarding to the private backend is pending | Retry the identical request/signature only. Never sign a new payment for the same operation |
+| `socket_session_replay_unrecoverable` | A socket payment was replayed but the origin could not return its token | Stop and contact the operator; do not buy repeatedly because the original payment may already be active |
 
 ## Watch errors
 
@@ -78,8 +81,9 @@ mitigation. Nothing in transit is exposed — the connection is `wss://`.
 | `socket_unavailable` | Transport dropped | Reconnects with jittered backoff on the **same** paid session. Never buys a session for a transport problem |
 | `pong_timeout` | Missed the 10-second pong deadline | Reconnects with the same token; the session is still valid |
 | `socket_session_expired` | The session TTL elapsed | Exactly one paid re-buy, subject to the 5-minute paid-session limiter |
-| `socket_replaced_elsewhere` | Close 4001/4401: another client claimed the payer's single connection slot | **Terminal. Never re-buy.** Another client legitimately owns the slot; buying again starts a two-client tug of war that bills both. Tell the user to stop the other client |
-| `too_many_connections` | Service soft cap or rate limit | Back off; surface any retry delay |
+| `socket_replaced_elsewhere` | Close 4001: another client claimed the payer's single connection slot | **Terminal. Never re-buy.** Another client legitimately owns the slot; buying again starts a two-client tug of war that bills both. Tell the user to stop the other client |
+| `too_many_connections` | Close 1013 or an HTTP rate limit/capacity response | Back off; surface any retry delay |
+| `socket_unauthorized` | Close 4401: the session token was rejected | Stop and require explicit session recovery; do not blindly loop purchases |
 | `socket_hello_mismatch` | The socket bound to a different wallet than the payer | Closed without creating anything. Do not retry payment until the operator investigates |
 | `socket_protocol_unrecognized` | A frame type, schema, or missing disclosure outside the approved contract | Closed safely, no further spend. The operator must confirm the socket protocol |
 | `socket_closed` | A close code outside the known table | Raw code surfaced, no further spend. Pending service-side confirmation of close-code meanings |
@@ -90,16 +94,16 @@ mitigation. Nothing in transit is exposed — the connection is `wss://`.
 
 | Code | Action | Spends? |
 |---|---|---|
-| 1000, 1001, 1006, 1011–1013 | Reconnect with backoff, same token | No |
-| 4003 (pong deadline) | Reconnect with backoff, same token | No |
-| 4008, 4429 | Reconnect with a longer backoff | No |
-| 4000, 4408 (expired) | One paid re-buy, rate limited | Yes, $0.01 |
-| 4001, 4401 (replaced) | **Terminal, never re-buy** | No |
+| 1000, 1001, 1006, 1011, 1012 | Reconnect with backoff, same token | No |
+| 1013 (capacity) | Reconnect with a longer backoff, same token | No |
+| 4003 (zombie/pong timeout) | Reconnect with backoff, same token | No |
+| 4002 (expired) | One paid re-buy, rate limited | Yes, $0.01 |
+| 4001 (replaced) | **Terminal, never re-buy** | No |
+| 4401 (unauthorized token) | Stop; require explicit recovery | No |
 | anything else | Stop and surface the raw code | No |
 
-The 4001/4003/4401 meanings are assumed from the service blueprint and are still
-pending authoritative confirmation. That is why an unknown code stops rather than
-guessing: the difference between "re-buy" and "never re-buy" is real money.
+Unknown close codes still stop without spending: the difference between "re-buy" and
+"never re-buy" is real money.
 
 ## Gap and recovery
 

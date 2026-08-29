@@ -18,6 +18,7 @@ import {
   DEFAULT_API_BASE_URL,
   DEFAULT_CDP_ACCOUNT_NAME,
   DEFAULT_DAILY_LIMIT_ATOMIC,
+  DEFAULT_SERVICE_PREFIX,
   DEFAULT_GAP_MIN_SECONDS,
   DEFAULT_MAX_AMOUNT_ATOMIC,
   DEFAULT_NETWORK,
@@ -145,8 +146,11 @@ export function ensureStateDir() {
 export function loadConfig() {
   const file = loadPublicFile();
   const apiBaseUrl = String(read("WATCHTRENDS_API_BASE_URL", DEFAULT_API_BASE_URL)).replace(/\/+$/, "");
+  const servicePrefix = `/${String(read("WATCHTRENDS_SERVICE_PREFIX", DEFAULT_SERVICE_PREFIX))
+    .replace(/^\/+|\/+$/g, "")}`;
   return {
     apiBaseUrl,
+    servicePrefix: servicePrefix === "/." ? "" : servicePrefix,
     payTo: String(read("WATCHTRENDS_EXPECTED_PAY_TO", DEFAULT_PAY_TO)).trim().toLowerCase(),
     network: String(read("WATCHTRENDS_EXPECTED_NETWORK", DEFAULT_NETWORK)).trim(),
     asset: String(read("WATCHTRENDS_EXPECTED_ASSET", USDC_BASE_ASSET)).trim(),
@@ -163,6 +167,15 @@ export function loadConfig() {
     configFile: file.path,
     rejectedSecretsInConfigFile: file.rejectedSecrets,
   };
+}
+
+export function apiPath(config, suffix) {
+  const pathSuffix = suffix.startsWith("/") ? suffix : `/${suffix}`;
+  return `${config.servicePrefix || ""}${pathSuffix}`;
+}
+
+export function apiUrl(config, suffix) {
+  return `${config.apiBaseUrl}${apiPath(config, suffix)}`;
 }
 
 /**
